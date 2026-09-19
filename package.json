@@ -37,7 +37,8 @@
       "provider": "github",
       "owner": "jakobgesche-beep",
       "repo": "dmx-mac-app",
-      "private": false
+      "private": false,
+      "releaseType": "release"
     }
   }
 }
