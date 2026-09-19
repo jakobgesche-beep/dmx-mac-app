@@ -43,13 +43,45 @@ npm run build
 ```
 
 Das Ergebnis liegt danach in `dist/` — eine `.dmg`-Datei zum Doppelklicken
-und in den Programme-Ordner ziehen, sowie eine `.zip` als Alternative.
+und in den Programme-Ordner ziehen, sowie eine `.zip` als Alternative. Der
+Dateiname ist bewusst fest (`DMX-Lichtsteuerung.dmg`, ohne Versionsnummer),
+damit der Download-Link auf der Website immer funktioniert, auch nach einem
+Update.
 
 **Hinweis:** Da die App nicht mit einem Apple-Entwicklerzertifikat signiert
 ist, wird macOS beim ersten Start wahrscheinlich warnen ("nicht verifizierter
 Entwickler"). Das lässt sich umgehen über Rechtsklick auf die App →
 „Öffnen" → im Dialog nochmal „Öffnen" bestätigen (nur beim allerersten Start
-nötig).
+nötig). **Das kann bei jedem Auto-Update erneut passieren** (siehe unten) —
+ohne Apple-Entwicklerzertifikat (99$/Jahr) lässt sich das nicht ganz
+vermeiden, ist aber nur ein Klick.
+
+## Update veröffentlichen (für Auto-Update & Download-Button)
+
+Damit die App sich selbst updaten kann und der Download-Button auf der
+Website immer die neueste Version bekommt, muss ein Release nicht nur
+gebaut, sondern auf GitHub veröffentlicht werden:
+
+1. Version in `package.json` hochzählen (z. B. `"version": "1.0.1"`).
+2. Einen GitHub **Personal Access Token** erstellen (github.com → Settings
+   → Developer settings → Personal access tokens → Tokens (classic) → Scope
+   `repo`, da das Repo privat ist).
+3. Im Terminal einmalig für die Sitzung setzen und veröffentlichen:
+   ```bash
+   export GH_TOKEN=dein_token_hier
+   npm run publish
+   ```
+   Das baut die App **und** lädt `.dmg`/`.zip` als neues GitHub-Release
+   in `jakobgesche-beep/dmx-mac-app` hoch.
+4. Fertig — jede bereits installierte App-Version prüft beim Start
+   automatisch auf GitHub nach einem neueren Release, lädt es im
+   Hintergrund herunter und zeigt oben einen Balken „Update
+   heruntergeladen — Jetzt neu starten & installieren" an. Der
+   Download-Button auf der Website zeigt ebenfalls immer auf das
+   neueste Release.
+
+**Ohne `npm run publish` (nur `npm run build`) passiert kein Auto-Update** —
+die Datei liegt dann nur lokal in `dist/`.
 
 ## Funktionen
 
@@ -61,6 +93,9 @@ nötig).
   3 Zonen, steuert Kanalgruppen direkt an
 - Aktivitäts-Log inkl. Simulationsmodus — funktioniert auch ganz ohne
   angeschlossene Hardware, um die Sequenz-Logik zu testen
+- Auto-Update: prüft beim Start automatisch auf GitHub nach neuen Releases,
+  lädt sie im Hintergrund herunter und installiert sie beim nächsten
+  Neustart (siehe „Update veröffentlichen" unten)
 
 ## Sequenz-Format
 

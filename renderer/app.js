@@ -115,6 +115,13 @@ function pulseIndicator(){
 }
 window.dmxAPI.onLog((msg) => logActivity(msg));
 
+// ================= Auto-Update =================
+window.dmxAPI.onUpdateReady((version) => {
+  const bar = el('<div class="update-bar">Update ' + esc(version) + ' heruntergeladen. <button class="btn small" id="install-update-btn">Jetzt neu starten &amp; installieren</button></div>');
+  document.body.appendChild(bar);
+  bar.querySelector('#install-update-btn').addEventListener('click', () => window.dmxAPI.installUpdateNow());
+});
+
 // ================= Sequenz-Player =================
 // { "name": "...", "loop": true, "steps": [ { "fade": ms, "hold": ms, "channels": { "1": 0-255, ... } }, ... ] }
 let playState = null;

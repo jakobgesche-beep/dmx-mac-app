@@ -6,9 +6,11 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --mac"
+    "build": "electron-builder --mac",
+    "publish": "electron-builder --mac --publish always"
   },
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "serialport": "^13.0.0"
   },
   "devDependencies": {
@@ -26,7 +28,14 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": ["dmg", "zip"]
+      "target": ["dmg", "zip"],
+      "artifactName": "DMX-Lichtsteuerung.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "jakobgesche-beep",
+      "repo": "dmx-mac-app",
+      "private": true
     }
   }
 }

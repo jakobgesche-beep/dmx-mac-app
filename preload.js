@@ -9,4 +9,7 @@ contextBridge.exposeInMainWorld("dmxAPI", {
   saveSequence: (name, code) => ipcRenderer.invoke("save-sequence", { name, code }),
   deleteSequence: (id) => ipcRenderer.invoke("delete-sequence", id),
   onLog: (callback) => ipcRenderer.on("dmx-log", (event, msg) => callback(msg)),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  installUpdateNow: () => ipcRenderer.invoke("install-update-now"),
+  onUpdateReady: (callback) => ipcRenderer.on("update-ready", (event, version) => callback(version)),
 });

@@ -2,7 +2,21 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { SerialPort } = require("serialport");
+const { autoUpdater } = require("electron-updater");
 const { NUM_CHANNELS, SERIAL_OPTIONS, buildDmxOutputPacket } = require("./dmx-protocol");
+
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on("checking-for-update", () => log("Suche nach Updates..."));
+autoUpdater.on("update-available", (info) => log("Update gefunden: Version " + info.version + " wird heruntergeladen..."));
+autoUpdater.on("update-not-available", () => log("Kein Update verfügbar, aktuelle Version ist die neueste."));
+autoUpdater.on("error", (err) => log("Update-Fehler: " + err.message));
+autoUpdater.on("download-progress", (p) => log("Update-Download: " + Math.round(p.percent) + "%"));
+autoUpdater.on("update-downloaded", (info) => {
+  log("Update " + info.version + " heruntergeladen — wird beim nächsten Beenden der App installiert.");
+  if (mainWindow) mainWindow.webContents.send("update-ready", info.version);
+});
 
 let mainWindow = null;
 let serialPort = null;
@@ -26,7 +40,12 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch((e) => log("Update-Prüfung fehlgeschlagen: " + e.message));
+  }
+});
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
@@ -131,4 +150,22 @@ ipcMain.handle("delete-sequence", async (event, id) => {
   const list = loadSequences().filter((s) => s.id !== id);
   saveSequencesFile(list);
   return list;
+});
+
+// ---------- Auto-Update ----------
+ipcMain.handle("check-for-updates", async () => {
+  if (!app.isPackaged) {
+    log("Update-Prüfung übersprungen (App läuft ungebaut über 'npm start').");
+    return { ok: false, reason: "not-packaged" };
+  }
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
+});
+
+ipcMain.handle("install-update-now", async () => {
+  autoUpdater.quitAndInstall();
 });
