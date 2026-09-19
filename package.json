@@ -1,0 +1,32 @@
+{
+  "name": "dmx-lichtsteuerung",
+  "version": "1.0.0",
+  "description": "Native Mac-App: DMX-Lichtsteuerung über Enttec USB DMX PRO",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac"
+  },
+  "dependencies": {
+    "serialport": "^13.0.0"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "de.technikag.dmxsteuerung",
+    "productName": "DMX Lichtsteuerung",
+    "files": [
+      "main.js",
+      "preload.js",
+      "dmx-protocol.js",
+      "renderer/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": ["dmg", "zip"]
+    }
+  }
+}
