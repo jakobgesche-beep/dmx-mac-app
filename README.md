@@ -56,32 +56,32 @@ nötig). **Das kann bei jedem Auto-Update erneut passieren** (siehe unten) —
 ohne Apple-Entwicklerzertifikat (99$/Jahr) lässt sich das nicht ganz
 vermeiden, ist aber nur ein Klick.
 
-## Update veröffentlichen (für Auto-Update & Download-Button)
+## Update veröffentlichen (für Auto-Update & Download-Button) — ganz ohne Terminal
 
-Damit die App sich selbst updaten kann und der Download-Button auf der
-Website immer die neueste Version bekommt, muss ein Release nicht nur
-gebaut, sondern auf GitHub veröffentlicht werden:
+Der eigentliche Build (`.dmg` + Upload als GitHub-Release) passiert **nicht
+mehr auf dem eigenen Mac**, sondern automatisch bei GitHub selbst
+(`.github/workflows/build-mac.yml`, läuft auf einem von GitHub bereit-
+gestellten Mac). Kein Node.js, kein Terminal, kein eigener Token nötig —
+GitHub baut auf eigenen Servern und veröffentlicht das Release selbst.
 
-1. Version in `package.json` hochzählen (z. B. `"version": "1.0.1"`).
-2. Einen GitHub **Personal Access Token** erstellen (github.com → Settings
-   → Developer settings → Personal access tokens → Tokens (classic) → Scope
-   `repo`, da das Repo privat ist).
-3. Im Terminal einmalig für die Sitzung setzen und veröffentlichen:
-   ```bash
-   export GH_TOKEN=dein_token_hier
-   npm run publish
-   ```
-   Das baut die App **und** lädt `.dmg`/`.zip` als neues GitHub-Release
-   in `jakobgesche-beep/dmx-mac-app` hoch.
-4. Fertig — jede bereits installierte App-Version prüft beim Start
-   automatisch auf GitHub nach einem neueren Release, lädt es im
-   Hintergrund herunter und zeigt oben einen Balken „Update
-   heruntergeladen — Jetzt neu starten & installieren" an. Der
-   Download-Button auf der Website zeigt ebenfalls immer auf das
-   neueste Release.
+Ein neues Release auslösen, geht auf zwei Wegen:
 
-**Ohne `npm run publish` (nur `npm run build`) passiert kein Auto-Update** —
-die Datei liegt dann nur lokal in `dist/`.
+**A) Über die GitHub-Website (kein Terminal):**
+1. Auf [github.com/jakobgesche-beep/dmx-mac-app/actions/workflows/build-mac.yml](https://github.com/jakobgesche-beep/dmx-mac-app/actions/workflows/build-mac.yml)
+   gehen (eingeloggt).
+2. Rechts auf **"Run workflow"** → **"Run workflow"** klicken.
+3. Ca. 3–5 Minuten warten (der kleine gelbe Punkt wird zu einem grünen
+   Haken) — danach ist ein neues Release da und der Download-Button auf der
+   Website funktioniert.
+
+**B) Automatisch bei neuer Versionsnummer:** sobald `package.json`s
+`"version"` geändert und mit einem passenden Git-Tag (`v1.0.1` z. B.)
+gepusht wird, baut GitHub automatisch los. Das übernehme ich (Claude) für
+dich, wenn du sagst "neue Version veröffentlichen".
+
+**Ohne einen dieser beiden Auslöser passiert kein neues Release** — Auto-
+Update und Download-Button beziehen sich immer auf das zuletzt so gebaute
+Release.
 
 ## Funktionen
 
