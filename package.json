@@ -1,6 +1,6 @@
 {
   "name": "dmx-lichtsteuerung",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Native Mac-App: DMX-Lichtsteuerung über Enttec USB DMX PRO",
   "main": "main.js",
   "private": true,
@@ -29,13 +29,15 @@
     "mac": {
       "category": "public.app-category.utilities",
       "target": ["dmg", "zip"],
-      "artifactName": "DMX-Lichtsteuerung.${ext}"
+      "artifactName": "DMX-Lichtsteuerung.${ext}",
+      "identity": null
     },
+    "afterSign": "scripts/afterSignAdHoc.js",
     "publish": {
       "provider": "github",
       "owner": "jakobgesche-beep",
       "repo": "dmx-mac-app",
-      "private": true
+      "private": false
     }
   }
 }
