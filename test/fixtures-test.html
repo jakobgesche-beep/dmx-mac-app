@@ -1,0 +1,101 @@
+<!DOCTYPE html><html><body><pre id="out"></pre>
+<script src="../shared/fixtures.js"></script>
+<script>
+const out = []; let fails = 0;
+function check(name, ok, detail){ if(!ok) fails++; out.push((ok ? 'OK    ' : 'FAIL  ') + name + (detail !== undefined ? '  ' + detail : '')); }
+const F = Fixtures;
+const arr = (u) => Array.from(u).join(',');
+const mh = (mode, extra) => Object.assign({ id: 'h1', name: 'Kopf 1', profile: 'stairville-mhx25', mode: mode || '12ch', address: 1 }, extra || {});
+
+// ---- Stairville MH-X25, 12-Kanal-Modus (Werte aus der Thomann-Anleitung) ----
+{
+  check('MH-X25: 12 Kanäle im 12-Kanal-Modus, 6 im 6-Kanal-Modus', F.channelCount(mh('12ch')) === 12 && F.channelCount(mh('6ch')) === 6);
+  const d = F.encode(mh(), {});
+  check('12ch Grundstellung: Pan/Tilt Mitte (128 / 128), fein 0, Farbe Weiß 2, Shutter offen 5, Dimmer 0, Gobo offen 3, Rest 0', arr(d) === '128,128,0,0,0,2,5,0,3,0,0,0', arr(d));
+  const p = F.encode(mh(), { pan: 0.25, tilt: 1 });
+  check('16 Bit: Pan 0,25 = 16384 -> grob 64, fein 0; Tilt 1 -> 255/255', p[0] === 64 && p[2] === 0 && p[1] === 255 && p[3] === 255, arr(p.slice(0, 4)));
+  const q = F.encode(mh(), { pan: 0.5001 });
+  check('16 Bit: feine Schritte landen im Feinkanal (Pan 0,5001 = 32774 -> 128 / 6)', q[0] === 128 && q[2] === 6, q[0] + '/' + q[2]);
+  check('Farbrad: Rot = Slot 7 -> Kanal 6 = 37; Dunkelblau = Slot 8 -> 42', F.encode(mh(), { color: 7 })[5] === 37 && F.encode(mh(), { color: 8 })[5] === 42);
+  check('Farbrad-Lauf: rechts herum Tempo 0 -> 128, Tempo 1 -> 191; links herum 192..255', F.encode(mh(), { color: { scroll: 'cw', speed: 0 } })[5] === 128 && F.encode(mh(), { color: { scroll: 'cw', speed: 1 } })[5] === 191 && F.encode(mh(), { color: { scroll: 'ccw', speed: 1 } })[5] === 255);
+  check('Dimmer 0,5 -> Kanal 8 = 128', F.encode(mh(), { dimmer: 0.5 })[7] === 128);
+  check('Shutter: offen 5, Blackout 0, Strobo 0,5 -> 8 + 104 = 112, Strobo 1 -> 215', F.encode(mh(), {})[6] === 5 && F.encode(mh(), { blackout: true })[6] === 0 && F.encode(mh(), { strobe: 0.5 })[6] === 112 && F.encode(mh(), { strobe: 1 })[6] === 215, arr([F.encode(mh(), { strobe: 0.5 })[6]]));
+  check('Gobo-Rad: Gobo 4 (Slot 3) -> 27; Gobo 8 (Slot 7) -> 59; Gobo 8 shake Tempo 0..1 -> 64..71', F.encode(mh(), { gobo: 3 })[8] === 27 && F.encode(mh(), { gobo: 7 })[8] === 59 && F.encode(mh(), { gobo: { slot: 7, shake: 0 } })[8] === 64 && F.encode(mh(), { gobo: { slot: 7, shake: 1 } })[8] === 71);
+  check('Gobo 2 shake = 112..119, Gobo-Lauf 128..255', F.encode(mh(), { gobo: { slot: 1, shake: 0 } })[8] === 112 && F.encode(mh(), { gobo: { scroll: 'cw', speed: 0 } })[8] === 128 && F.encode(mh(), { gobo: { scroll: 'ccw', speed: 1 } })[8] === 255);
+  check('Gobo-Drehung: feste Position 0..63, rechts 64..147, links 148..231, Jojo 232..255', F.encode(mh(), { goboRot: { mode: 'fixed', angle: 1 } })[9] === 63 && F.encode(mh(), { goboRot: { mode: 'cw', speed: 0 } })[9] === 64 && F.encode(mh(), { goboRot: { mode: 'cw', speed: 1 } })[9] === 147 && F.encode(mh(), { goboRot: { mode: 'ccw', speed: 0 } })[9] === 148 && F.encode(mh(), { goboRot: { mode: 'yoyo', speed: 1 } })[9] === 255);
+  check('Sonderfunktion (Kanal 11) und Programm (Kanal 12) bleiben 0 und lassen sich gezielt setzen (Reset = 152)', F.encode(mh(), {})[10] === 0 && F.encode(mh(), {})[11] === 0 && F.encode(mh(), { special: 152 })[10] === 152);
+  check('Geschwindigkeit (Kanal 5) folgt dem Attribut speed', F.encode(mh(), { speed: 1 })[4] === 255);
+}
+// ---- 6-Kanal-Modus ----
+{
+  const d = F.encode(mh('6ch'), { dimmer: 1 });
+  check('6ch: Pan, Tilt, Farbe, Shutter, Gobo, Gobo-Drehung: 128,128,2,5,3,0', arr(d) === '128,128,2,5,3,0', arr(d));
+  check('6ch: kein Dimmer, "Dimmer 0" schließt den Shutter (Blackout, 0)', F.encode(mh('6ch'), { dimmer: 0 })[3] === 0 && F.encode(mh('6ch'), { dimmer: 0.4 })[3] === 5);
+  check('6ch: Strobo bei offenem Dimmer 112, bei Dimmer 0 bleibt es dunkel', F.encode(mh('6ch'), { dimmer: 1, strobe: 0.5 })[3] === 112 && F.encode(mh('6ch'), { dimmer: 0, strobe: 0.5 })[3] === 0);
+  const c6 = F.capabilities(mh('6ch')), c12 = F.capabilities(mh('12ch'));
+  check('Fähigkeiten: 12ch dimmbar und mit Geschwindigkeit; 6ch nur an/aus, ohne Geschwindigkeit; beide Pan/Tilt/Farbrad/Gobo/Strobo', c12.dimmerFull && c12.speed && !c12.dimmerOnOff && !c6.dimmerFull && c6.dimmerOnOff && !c6.speed && c6.pan && c6.tilt && c6.colorWheel && c6.gobo && c6.goboRot && c6.strobe);
+  check('Farbrad hat 9 Farben, Gobo-Rad 8 Stellungen', F.slotsOf(mh(), 'color').length === 9 && F.slotsOf(mh(), 'gobo').length === 8 && F.slotsOf(mh(), 'color')[7].name === 'Rot');
+}
+// ---- einfache Geräte ----
+{
+  const sw = { id: 's', profile: 'generic-switch', mode: '1ch', address: 5 };
+  check('an/aus-Lampe: unter 0,5 = 0, ab 0,5 = 255', F.encode(sw, { dimmer: 0.49 })[0] === 0 && F.encode(sw, { dimmer: 0.5 })[0] === 255 && F.encode(sw, { dimmer: 1 })[0] === 255);
+  const dm = { id: 'd', profile: 'generic-dimmer', mode: '1ch', address: 1 };
+  check('dimmbare Lampe: 0,5 -> 128', F.encode(dm, { dimmer: 0.5 })[0] === 128);
+  const rgb = { id: 'r', profile: 'generic-rgb', mode: '3ch', address: 1 };
+  check('RGB: Rot voll, Grün halb, Blau aus -> 255,128,0; ohne Helligkeit dunkel (Start dunkel); dimmer 0,5 dunkelt alle Farben', arr(F.encode(rgb, { color: { r: 1, g: 0.5, b: 0 }, dimmer: 1 })) === '255,128,0' && arr(F.encode(rgb, { color: { r: 1, g: 0.5, b: 0 } })) === '0,0,0' && arr(F.encode(rgb, { color: { r: 1, g: 0.5, b: 0 }, dimmer: 0.5 })) === '128,64,0', arr(F.encode(rgb, { color: { r: 1, g: 0.5, b: 0 }, dimmer: 0.5 })));
+  const rgbd = { id: 'r2', profile: 'generic-rgbd', mode: '4ch', address: 1 };
+  check('RGB mit Dimmer: Kanal 1 = Dimmer, Farben bleiben unverändert', arr(F.encode(rgbd, { color: { r: 1, g: 0.5, b: 0 }, dimmer: 0.5 })) === '128,255,128,0', arr(F.encode(rgbd, { color: { r: 1, g: 0.5, b: 0 }, dimmer: 0.5 })));
+  const st = { id: 'x', profile: 'generic-strobe', mode: '2ch', address: 1 };
+  check('Strobo 2 Kanäle: Rate und Helligkeit', arr(F.encode(st, { strobe: 1, dimmer: 0.5 })) === '255,128', arr(F.encode(st, { strobe: 1, dimmer: 0.5 })));
+}
+// ---- eigenes Gerät ----
+{
+  const p = F.customProfile('mein-par', 'Mein Par', [{ type: 'dimmer' }, { type: 'red' }, { type: 'green' }, { type: 'blue' }, { type: 'strobe' }, { type: 'raw', default: 20 }]);
+  F.registerProfile(p);
+  const f = { id: 'c', profile: 'mein-par', mode: 'std', address: 10 };
+  check('eigenes Gerät: 6 Kanäle, Werte aus Dimmer/Rot/Grün/Blau/Strobo und festem Wert', F.channelCount(f) === 6 && arr(F.encode(f, { dimmer: 1, color: { r: 1, g: 0, b: 0.5 }, strobe: 0 })) === '255,255,0,128,0,20', arr(F.encode(f, { dimmer: 1, color: { r: 1, g: 0, b: 0.5 }, strobe: 0 })));
+  check('eigenes Gerät steht in der Geräteliste', F.listProfiles().some((x) => x.id === 'mein-par' && x.custom));
+  const mv = F.customProfile('mein-kopf', 'Mein Kopf', [{ type: 'pan' }, { type: 'pan-fine' }, { type: 'tilt' }, { type: 'tilt-fine' }, { type: 'dimmer' }]);
+  F.registerProfile(mv);
+  const g = { id: 'k', profile: 'mein-kopf', mode: 'std', address: 1 };
+  check('eigener Kopf mit Pan/Tilt fein: 16 Bit wie beim Original', arr(F.encode(g, { pan: 0.5001, tilt: 0.25, dimmer: 1 })) === '128,6,64,0,255', arr(F.encode(g, { pan: 0.5001, tilt: 0.25, dimmer: 1 })));
+  check('eigener Kopf gilt als beweglich', F.getProfile('mein-kopf').kind === 'moving');
+}
+// ---- Adressen ----
+{
+  const fx = [mh('12ch', { id: 'a', name: 'Kopf A', address: 1 }), mh('12ch', { id: 'b', name: 'Kopf B', address: 13 }), { id: 'c', name: 'Schalter', profile: 'generic-switch', mode: '1ch', address: 25 }];
+  check('Adressen ohne Überschneidung: keine Warnung, höchster Kanal = 25', F.checkPatch(fx).length === 0 && F.highestChannel(fx) === 25);
+  fx[1].address = 10;
+  const w = F.checkPatch(fx);
+  check('Überschneidung wird gemeldet (Kopf B bei Kanal 10 mit Kopf A)', w.length === 1 && w[0].fixtureId === 'b' && /Überschneidung/.test(w[0].message) && /Kopf A/.test(w[0].message), JSON.stringify(w));
+  fx[1].address = 505;
+  check('zu weit hinten: 505 + 12 Kanäle passt nicht', F.checkPatch(fx).some((x) => x.fixtureId === 'b' && /passt nicht/.test(x.message)));
+  fx[1].address = 0;
+  check('Adresse 0 ungültig', F.checkPatch(fx).some((x) => x.fixtureId === 'b'));
+  fx[1].address = 13;
+  const u = F.buildUniverse(fx, { a: { dimmer: 1, color: 7 }, c: { dimmer: 1 } });
+  check('DMX-Bild: Kopf A ab Kanal 1 (Dimmer Kanal 8 = 255, Farbe Kanal 6 = 37), Kopf B Grundstellung ab Kanal 13, Schalter Kanal 25 = 255', u[7] === 255 && u[5] === 37 && u[12] === 128 && u[24] === 255 && u[25] === 0 && u.length === 512, arr(u.slice(0, 26)));
+  check('Unbekanntes Gerät wird gemeldet, bricht aber nichts', F.checkPatch([{ id: 'z', name: 'Z', profile: 'gibt-es-nicht', mode: 'x', address: 1 }]).length === 1 && F.buildUniverse([{ id: 'z', profile: 'nix', mode: 'x', address: 1 }], {}).every((v) => v === 0));
+}
+// ---- Anzeige ----
+{
+  const v = F.visual(mh(), { dimmer: 1, color: 7, gobo: 3, pan: 0.2, tilt: 0.8, strobe: 0 }, 0);
+  check('Anzeige: Farbe Rot, Intensität 1, Gobo-Symbol "ring", Pan/Tilt übernommen', v.color === '#ff2d2d' && v.intensity === 1 && v.shape === 'ring' && v.pan === 0.2 && v.tilt === 0.8 && v.moving && v.strobeHz === 0, JSON.stringify(v));
+  check('Anzeige: Blackout und Dimmer 0 = dunkel', F.visual(mh(), { dimmer: 1, blackout: true }, 0).intensity === 0 && F.visual(mh(), { dimmer: 0 }, 0).intensity === 0);
+  check('Anzeige 6ch: Dimmer über Shutter (an/aus)', F.visual(mh('6ch'), { dimmer: 0.3 }, 0).intensity === 1 && F.visual(mh('6ch'), { dimmer: 0 }, 0).intensity === 0);
+  check('Anzeige: Strobo 0,5 = ca. 10,5 Hz (1 bis 20 Hz)', Math.abs(F.visual(mh(), { dimmer: 1, strobe: 0.5 }, 0).strobeHz - 10.5) < 0.01);
+  check('Anzeige: Farblauf wechselt mit der Zeit', F.visual(mh(), { dimmer: 1, color: { scroll: 'cw', speed: 0.5 } }, 0).color !== F.visual(mh(), { dimmer: 1, color: { scroll: 'cw', speed: 0.5 } }, 1).color);
+  const r = { id: 'r', profile: 'generic-rgb', mode: '3ch', address: 1 };
+  check('Anzeige RGB: Farbe aus den Reglern', F.visual(r, { color: { r: 1, g: 0, b: 0 }, dimmer: 1 }, 0).color === 'rgb(255,0,0)' && !F.visual(r, {}, 0).moving);
+  const sw = { id: 's', profile: 'generic-switch', mode: '1ch', address: 1 };
+  {
+    const cs = F.capabilities(sw), cr = F.capabilities(r), cst = F.capabilities({ id: 'x', profile: 'generic-strobe', mode: '2ch', address: 1 }), cd = F.capabilities({ id: 'y', profile: 'generic-dimmer', mode: '1ch', address: 1 });
+    check('Fähigkeiten an/aus-Lampe: nur an/aus (kein stufenloser Dimmer), ohne Position/Farbe/Strobo', cs.dimmer && cs.dimmerOnOff && !cs.dimmerFull && !cs.pan && !cs.colorRgb && !cs.strobe, JSON.stringify(cs));
+    check('Fähigkeiten RGB (3 Kanäle) hat Farbe, aber keinen Dimmer; Strobo-Gerät (2 Kanäle) hat Strobo und stufenlose Helligkeit; Dimmer-Gerät stufenlos', cr.colorRgb && !cr.dimmer && cst.strobe && cst.dimmerFull && !cst.dimmerOnOff && cd.dimmerFull && !cd.dimmerOnOff);
+  }
+  check('Anzeige an/aus-Lampe', F.visual(sw, { dimmer: 1 }, 0).intensity === 1 && F.visual(sw, { dimmer: 0.2 }, 0).intensity === 0);
+}
+out.push(fails ? '==> ' + fails + ' FEHLER' : '==> alle Tests bestanden');
+document.getElementById('out').textContent = out.join('\n');
+</script></body></html>

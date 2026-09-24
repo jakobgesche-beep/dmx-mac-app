@@ -1,7 +1,7 @@
 {
   "name": "dmx-lichtsteuerung",
-  "version": "1.0.1",
-  "description": "Native Mac-App: DMX-Lichtsteuerung über Enttec USB DMX PRO",
+  "version": "2.0.0",
+  "description": "Lichtsteuerung für Bühne: Enttec DMX USB PRO, Moving Heads, Strobos, Musik- und Kamera-Unterstützung",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -10,7 +10,6 @@
     "publish": "electron-builder --mac --publish always"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9",
     "serialport": "^13.0.0"
   },
   "devDependencies": {
@@ -23,14 +22,22 @@
     "files": [
       "main.js",
       "preload.js",
-      "dmx-protocol.js",
+      "shared/**/*",
       "renderer/**/*"
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "artifactName": "DMX-Lichtsteuerung.${ext}",
-      "identity": null
+      "identity": null,
+      "icon": "build/icon.icns",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Für die Kamera-Kontrolle der Bühne (z. B. iPhone-Kamera): Die App vergleicht, ob das Licht auf der Bühne zum Plan passt.",
+        "NSMicrophoneUsageDescription": "Für die Musik-Erkennung (Takt und Tempo) über das Audio-Interface am Pult."
+      }
     },
     "afterSign": "scripts/afterSignAdHoc.js",
     "publish": {
@@ -39,6 +46,7 @@
       "repo": "dmx-mac-app",
       "private": false,
       "releaseType": "release"
-    }
+    },
+    "npmRebuild": false
   }
 }

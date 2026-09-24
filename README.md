@@ -1,126 +1,80 @@
-# DMX Lichtsteuerung (Mac-App)
+# DMX Lichtsteuerung
 
-Native macOS-App (Electron) zur Ausgabe von KI-geschriebenen Lichtsequenzen
-über eine **Enttec DMX USB PRO** (oder Mk2). Anders als die Browser-Version
-läuft das hier nicht über WebSerial (Chrome/Edge-Beschränkung), sondern
-direkt über Node.js (`serialport`-Paket) — funktioniert dadurch unabhängig
-vom Browser.
+Mac-App (Electron) für die Bühnenbeleuchtung der Technik-AG. Sie steuert über eine
+**Enttec DMX USB PRO** Moving Heads, Strobos, RGB-Lampen und einfache An/Aus-Lampen.
+Aussehen und Bedienung sind wie bei der X32-Fernsteuerung: schlicht, dunkel, mit Touch-Modus
+und automatischem Update.
 
-## ⚠️ Ungetestet an echter Hardware
+## Stand
 
-Das Enttec-Protokoll (`dmx-protocol.js`: Baudrate 250000/8 Datenbits/2
-Stopbits/keine Parität, Paket-Framing 0x7E...0xE7, Label 6 = DMX-Ausgabe) ist
-nach der offiziellen „Enttec USB Pro API Specification" umgesetzt, konnte
-aber nicht an echter Hardware getestet werden. Erster Test: App starten,
-„Verbinden" klicken, das Enttec-Gerät aus der Liste wählen, dann unter
-„Manuelle Kanäle" einen Regler hochziehen und schauen, ob ein angeschlossenes
-Gerät reagiert. Reagiert nichts, zuerst Baudrate/Framing in `dmx-protocol.js`
-gegen die offizielle Spec-PDF prüfen.
+**Version 2.0 (Meilenstein A):** Bühne, Geräte, Looks, Effekte im Takt, DMX-Ausgabe, Updates.
+Noch nicht drin, aber geplant: Bühnenplan mit Foto (B), Musik-Erkennung und Songs (C),
+Kamera-Kontrolle mit dem iPhone (D), Windows-Version.
 
-## Setup (einmalig, braucht Node.js)
+> **Ungetestet an echter Hardware.** Das Enttec-Protokoll ist nach der Hersteller-Beschreibung
+> umgesetzt und im Rechner-Test geprüft, aber noch nie an einer echten Enttec-Box gelaufen.
+> Auch die Zuordnung von Pan/Tilt (links/rechts, oben/unten) kann bei deinen Köpfen
+> vertauscht sein. Dafür gibt es pro Gerät die Schalter „Pan umkehren“ und „Tilt umkehren“.
 
-Falls noch nicht installiert: Node.js von [nodejs.org](https://nodejs.org)
-installieren (LTS-Version reicht).
+## Erster Start mit Hardware
+
+1. Enttec per USB an den Mac, DMX-Kabel an den ersten Kopf.
+2. App öffnen. Oben rechts steht „Simulation“, bis die Box gefunden ist. Danach „Enttec verbunden“.
+   Unter **Einstellungen** siehst du Seriennummer und Firmware der Box (das ist die Kontrolle,
+   dass wirklich ein Enttec antwortet).
+3. Unter **Geräte** die Lampen anlegen („+ Gerät hinzufügen“). Die Adressen werden fortlaufend vergeben.
+   Am Kopf muss dieselbe Startadresse und die Betriebsart (12 oder 6 Kanäle) eingestellt sein.
+4. Unter **Einstellungen → Kanal-Test** einen Kanal auf einen Wert stellen und schauen,
+   ob die Lampe reagiert (z. B. Kanal 8 = Dimmer beim MH-X25 im 12-Kanal-Modus).
+5. Auf der **Bühne** Lampen auswählen und bedienen.
+
+## Geräte
+
+| Gerät | Kanäle |
+|---|---|
+| Stairville MH-X25 LED Spot | 12 oder 6 Kanäle, Farbrad, Gobos, Shutter/Strobo |
+| Bühnenlicht an/aus | 1 Kanal, schaltet ab 50 % |
+| Bühnenlicht dimmbar | 1 Kanal |
+| RGB-Scheinwerfer | 3 Kanäle, auch mit Dimmer (4) |
+| Stroboskop | 2 Kanäle (Blitzrate, Helligkeit) oder 1 Kanal |
+| Eigenes Gerät | Kanalliste selbst zusammenstellen |
+
+Die Gobo-Symbole des MH-X25 sind Platzhalter (die Stellungen 1 bis 8 stimmen, die Bilder nicht).
+
+## Bühne
+
+* **Bühnenansicht** (Draufsicht und Seitenansicht): zeigt live Strahl, Farbe, Gobo, Blitz und Kopfbewegung,
+  berechnet aus denselben Werten, die an die Lampen gehen. Die Köpfe fahren mit begrenzter Geschwindigkeit
+  wie echte Lampen (abschaltbar).
+* **Zielen:** auf die Bühne tippen, die gewählten Köpfe richten sich darauf aus. Dafür braucht die App
+  die Position und Aufhängung der Lampen (Geräte → Bearbeiten: Position, Höhe, hängend/Boden, Drehung).
+* **Looks:** Lichtstimmungen speichern und mit Überblenden abrufen.
+* **Effekte im Takt:** Lauflicht, Pulsieren, Bewegung, Farbwechsel, Blitz-Schläge, Gobo-Wechsel.
+  Tempo unten in der Leiste (BPM, Tap, Takt-Eins).
+* **Blackout** und **Master** immer unten.
+
+## Updates
+
+Die App prüft im Hintergrund alle 10 Minuten auf eine neue Version, lädt sie sofort herunter und
+zeigt oben „Update bereit“. Ein Klick auf „Jetzt neu starten“ tauscht die App aus und öffnet sie neu;
+sonst wird das Update beim normalen Beenden eingespielt. Das Licht wird dabei kurz dunkel.
+
+## Entwicklung
+
+Kein Build nötig, um die Logik zu testen: die Testseiten in `test/` laufen in jedem Browser.
+
+```
+shared/   Licht-Logik ohne Oberfläche (DMX-Protokoll, Geräte, Bühnen-Geometrie, Effekte, Engine)
+renderer/ Oberfläche
+main.js   Fenster, Enttec-Anschluss, Speichern, Updates
+test/     dmx-test, fixtures-test, stage-test, engine-test, update-test, core-ui-test, e2e (per make-e2e.py)
+```
+
+App bauen und veröffentlichen: einen Tag `vX.Y.Z` pushen, GitHub Actions baut die Mac-App
+(`.dmg` und `.zip`) und legt sie als Release ab.
 
 ```bash
-cd dmx-mac-app
 npm install
-```
-
-`serialport` hat native Bestandteile, die beim `npm install` automatisch für
-Electron nachgebaut werden (kann beim ersten Mal etwas dauern).
-
-## Starten (zum Testen, ohne Installation)
-
-```bash
-npm start
-```
-
-## Als echte Mac-App bauen (.dmg)
-
-```bash
-npm run build
-```
-
-Das Ergebnis liegt danach in `dist/` — eine `.dmg`-Datei zum Doppelklicken
-und in den Programme-Ordner ziehen, sowie eine `.zip` als Alternative. Der
-Dateiname ist bewusst fest (`DMX-Lichtsteuerung.dmg`, ohne Versionsnummer),
-damit der Download-Link auf der Website immer funktioniert, auch nach einem
-Update.
-
-**Hinweis:** Da die App nicht mit einem Apple-Entwicklerzertifikat signiert
-ist, wird macOS beim ersten Start wahrscheinlich warnen ("nicht verifizierter
-Entwickler"). Das lässt sich umgehen über Rechtsklick auf die App →
-„Öffnen" → im Dialog nochmal „Öffnen" bestätigen (nur beim allerersten Start
-nötig). **Das kann bei jedem Auto-Update erneut passieren** (siehe unten) —
-ohne Apple-Entwicklerzertifikat (99$/Jahr) lässt sich das nicht ganz
-vermeiden, ist aber nur ein Klick.
-
-## Update veröffentlichen (für Auto-Update & Download-Button) — ganz ohne Terminal
-
-Der eigentliche Build (`.dmg` + Upload als GitHub-Release) passiert **nicht
-mehr auf dem eigenen Mac**, sondern automatisch bei GitHub selbst
-(`.github/workflows/build-mac.yml`, läuft auf einem von GitHub bereit-
-gestellten Mac). Kein Node.js, kein Terminal, kein eigener Token nötig —
-GitHub baut auf eigenen Servern und veröffentlicht das Release selbst.
-
-Ein neues Release auslösen, geht auf zwei Wegen:
-
-**A) Über die GitHub-Website (kein Terminal):**
-1. Auf [github.com/jakobgesche-beep/dmx-mac-app/actions/workflows/build-mac.yml](https://github.com/jakobgesche-beep/dmx-mac-app/actions/workflows/build-mac.yml)
-   gehen (eingeloggt).
-2. Rechts auf **"Run workflow"** → **"Run workflow"** klicken.
-3. Ca. 3–5 Minuten warten (der kleine gelbe Punkt wird zu einem grünen
-   Haken) — danach ist ein neues Release da und der Download-Button auf der
-   Website funktioniert.
-
-**B) Automatisch bei neuer Versionsnummer:** sobald `package.json`s
-`"version"` geändert und mit einem passenden Git-Tag (`v1.0.1` z. B.)
-gepusht wird, baut GitHub automatisch los. Das übernehme ich (Claude) für
-dich, wenn du sagst "neue Version veröffentlichen".
-
-**Ohne einen dieser beiden Auslöser passiert kein neues Release** — Auto-
-Update und Download-Button beziehen sich immer auf das zuletzt so gebaute
-Release.
-
-## Funktionen
-
-- Serielle Geräte auflisten & verbinden (Enttec-Box)
-- Sequenz-Editor: JSON-Code einfügen, abspielen, stoppen
-- Sequenzen lokal speichern/laden (Datei im App-Datenverzeichnis, kein Server)
-- Manuelle Kanalregler (1–16) zum Testen
-- Reaktive Kamera-Steuerung (experimentell): Bewegungserkennung per Webcam in
-  3 Zonen, steuert Kanalgruppen direkt an
-- Aktivitäts-Log inkl. Simulationsmodus — funktioniert auch ganz ohne
-  angeschlossene Hardware, um die Sequenz-Logik zu testen
-- Auto-Update: prüft beim Start automatisch auf GitHub nach neuen Releases,
-  lädt sie im Hintergrund herunter und installiert sie beim nächsten
-  Neustart (siehe „Update veröffentlichen" unten)
-
-## Sequenz-Format
-
-Identisch zur Browser-Version:
-
-```json
-{
-  "name": "Test-Chase (Kanal 1-3)",
-  "loop": true,
-  "steps": [
-    { "fade": 400, "hold": 600, "channels": { "1": 255, "2": 0, "3": 0 } },
-    { "fade": 400, "hold": 600, "channels": { "1": 0, "2": 255, "3": 0 } }
-  ]
-}
-```
-
-## Struktur
-
-```
-main.js             Electron-Hauptprozess: Fenster, serielle Verbindung
-                     (serialport), Sequenzen-Datei-Speicherung
-preload.js           Sichere Brücke (contextBridge) zwischen Hauptprozess
-                     und der UI (window.dmxAPI)
-dmx-protocol.js       Enttec-Paketbildung (von main.js genutzt)
-renderer/
-  index.html, style.css, app.js   Die UI (Sequenz-Player, Regler,
-                                   Kamera-Reaktiv-Modus, Log)
+npm start          # App lokal starten
+npm run build      # lokal bauen
 ```

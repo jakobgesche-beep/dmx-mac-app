@@ -1,0 +1,24 @@
+<!DOCTYPE html><html><body><pre id="out"></pre>
+<script src="../shared/update-util.js"></script>
+<script>
+const out = []; let fails = 0;
+function check(name, ok, detail){ if(!ok) fails++; out.push((ok ? 'OK    ' : 'FAIL  ') + name + (detail !== undefined ? '  ' + detail : '')); }
+const U = UpdateUtil;
+check('Versionen vergleichen: 2.0.1 > 2.0.0, 2.10.0 > 2.9.9, 3.0.0 > 2.99.99, gleich = nicht neuer', U.isNewer('2.0.1', '2.0.0') && U.isNewer('2.10.0', '2.9.9') && U.isNewer('3.0.0', '2.99.99') && !U.isNewer('2.0.0', '2.0.0') && !U.isNewer('1.9.9', '2.0.0'));
+check('"v"-Vorsatz und fehlende Teile', U.isNewer('v2.1', '2.0.5') && !U.isNewer('v2', '2.0.0'));
+const asset = (n) => ({ name: n, browser_download_url: 'https://x/' + n, size: 100 });
+const rels = [
+  { tag_name: 'v2.0.1', draft: false, prerelease: false, html_url: 'p1', assets: [asset('X.zip.blockmap')] },   // unvollständiges Doppel
+  { tag_name: 'v2.0.1', draft: false, prerelease: false, html_url: 'p2', assets: [asset('X.zip'), asset('X.dmg')] },
+  { tag_name: 'v2.1.0', draft: true, prerelease: false, html_url: 'p3', assets: [asset('X.zip')] },
+  { tag_name: 'v2.2.0', draft: false, prerelease: true, html_url: 'p4', assets: [asset('X.zip')] },
+  { tag_name: 'v2.0.0', draft: false, prerelease: false, html_url: 'p5', assets: [asset('X.zip')] },
+];
+const best = U.pickRelease(rels, 'X.zip');
+check('Release-Auswahl: das höchste veröffentlichte mit der Datei (2.0.1), Entwürfe und Vorabversionen zählen nicht', best && best.version === '2.0.1' && best.pageUrl === 'p2' && best.zipUrl === 'https://x/X.zip', JSON.stringify(best));
+check('keine passende Datei: null', U.pickRelease([{ tag_name: 'v1', assets: [] }], 'X.zip') === null && U.pickRelease([], 'X.zip') === null && U.pickRelease(null, 'X.zip') === null);
+const s = U.swapScript();
+check('Austausch-Skript: wartet auf das Beenden, tauscht mit Rückweg, öffnet nur bei REOPEN=1 wieder', /kill -0 "\$PID"/.test(s) && /mv "\$OLD" "\$TARGET"/.test(s) && /\[ "\$REOPEN" = "1" \] && open/.test(s) && /Rollback/.test(s));
+out.push(fails ? '==> ' + fails + ' FEHLER' : '==> alle Tests bestanden');
+document.getElementById('out').textContent = out.join('\n');
+</script></body></html>

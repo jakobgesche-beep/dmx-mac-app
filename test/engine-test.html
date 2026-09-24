@@ -1,0 +1,146 @@
+<!DOCTYPE html><html><body><pre id="out"></pre>
+<script src="../shared/fixtures.js"></script>
+<script src="../shared/stage.js"></script>
+<script src="../shared/effects.js"></script>
+<script src="../shared/engine.js"></script>
+<script>
+const out = []; let fails = 0;
+function check(name, ok, detail){ if(!ok) fails++; out.push((ok ? 'OK    ' : 'FAIL  ') + name + (detail !== undefined ? '  ' + detail : '')); }
+const near = (a, b, tol) => Math.abs(a - b) <= tol;
+const F = Fixtures;
+const heads = (n) => Array.from({ length: n }, (_, i) => ({ id: 'h' + (i + 1), name: 'Kopf ' + (i + 1), profile: 'stairville-mhx25', mode: '12ch', address: 1 + i * 12, group: 'Köpfe', pos: { x: -3 + i * 2, y: 3, z: 4 }, mount: 'hang', yaw: 0 }));
+const mk = (extra) => { const e = new LightEngine(); e.setFixtures(heads(4).concat([{ id: 's1', name: 'Schalter', profile: 'generic-switch', mode: '1ch', address: 60, group: 'Bühne' }, { id: 'x1', name: 'Strobo', profile: 'generic-strobe', mode: '2ch', address: 70, group: 'Strobo' }]).concat(extra || [])); return e; };
+const dim = (r, id) => r.live[id].dimmer;
+
+// ---- Grundlagen ----
+{
+  const e = mk();
+  const r = e.tick(0, { beat: 0 });
+  check('Start: alles dunkel, Köpfe in der Mitte, DMX-Bild wie aus den Profilen berechnet', r.universe[7] === 0 && r.universe[0] === 128 && r.universe[1] === 128 && r.universe[59] === 0 && e.channels === 71, 'höchster Kanal ' + e.channels);
+  e.set('h1', 'dimmer', 1); e.set('h1', 'color', 7); e.set('s1', 'dimmer', 1);
+  const r2 = e.tick(40, { beat: 0.1 });
+  check('Werte setzen: Kopf 1 hell (Kanal 8 = 255) und rot (Kanal 6 = 37), Schalter an (Kanal 60 = 255); gemeldet als geändert', r2.universe[7] === 255 && r2.universe[5] === 37 && r2.universe[59] === 255 && r2.changed);
+  const r3 = e.tick(80, { beat: 0.2 });
+  check('nichts geändert: changed = false', !r3.changed);
+  check('Auswahl: "all", "group:Köpfe", "kind:moving", Liste, einzelnes Gerät', e.resolve('all').length === 6 && e.resolve('group:Köpfe').length === 4 && e.resolve('kind:moving').length === 4 && e.resolve(['h1', 'h9']).join() === 'h1' && e.resolve('s1').join() === 's1' && e.resolve('kind:strobe').join() === 'x1');
+  e.setMany('group:Köpfe', { dimmer: 0.5 });
+  check('mehrere Geräte auf einmal setzen', e.tick(120, { beat: 0.3 }).universe[7 + 12] === 128);
+  const shot = e.snapshot('h1');
+  check('Schnappschuss ist eine Kopie', shot.h1.dimmer === 0.5 && (e.set('h1', 'dimmer', 1), shot.h1.dimmer === 0.5));
+}
+// ---- Master, Blackout ----
+{
+  const e = mk(); e.setMany('group:Köpfe', { dimmer: 1 }); e.master = 0.5;
+  check('Master 50 %: Dimmer halbiert (128)', e.tick(0, { beat: 0 }).universe[7] === 128);
+  e.master = 1; e.blackout = true;
+  const r = e.tick(40, { beat: 0 });
+  check('Blackout: Dimmer 0 und Shutter geschlossen (Kanal 7 = 0)', r.universe[7] === 0 && r.universe[6] === 0);
+  e.blackout = false;
+  check('Blackout aus: sofort wieder hell', e.tick(80, { beat: 0 }).universe[7] === 255);
+}
+// ---- Überblendung ----
+{
+  const e = mk(); e.setMany('group:Köpfe', { dimmer: 0, color: 0, pan: 0.5 });
+  e.tick(0, { beat: 0 });
+  e.goTo({ h1: { dimmer: 1, pan: 1, color: 7 } }, 2, 0);
+  let r = e.tick(900, { beat: 0 });
+  check('Überblendung 2 s: bei 0,9 s springt die Farbe noch nicht', r.live.h1.color === 0 && near(dim(r, 'h1'), 0.45, 1e-9));
+  r = e.tick(1000, { beat: 0 });
+  check('Überblendung 2 s: nach 1 s Helligkeit 0,5 und Pan 0,75', near(dim(r, 'h1'), 0.5, 1e-9) && near(r.live.h1.pan, 0.75, 1e-9));
+  r = e.tick(1100, { beat: 0 });
+  check('Farbwechsel (Farbrad) springt nach der Hälfte', r.live.h1.color === 7);
+  r = e.tick(2000, { beat: 0 });
+  check('nach 2 s am Ziel, Überblendung beendet', dim(r, 'h1') === 1 && r.live.h1.pan === 1 && e.fade === null);
+  e.goTo({ h2: { dimmer: 1 } }, 0);
+  check('Zeit 0 = sofort', e.tick(2040, { beat: 0 }).live.h2.dimmer === 1);
+  e.setMany('h3', { dimmer: 0 }); e.goTo({ h3: { dimmer: 1, tilt: 1 } }, 4, 3000);
+  e.tick(5000, { beat: 0 });
+  e.set('h3', 'dimmer', 0.2);
+  const r5 = e.tick(6000, { beat: 0 });
+  check('Handbedienung während der Überblendung: der eingestellte Wert bleibt (0,2), die Neigung blendet weiter', near(dim(r5, 'h3'), 0.2, 1e-9) && r5.live.h3.tilt > 0.7, dim(r5, 'h3') + ' / ' + r5.live.h3.tilt);
+  const rgbE = new LightEngine(); rgbE.setFixtures([{ id: 'r', profile: 'generic-rgb', mode: '3ch', address: 1 }]);
+  rgbE.setMany('r', { color: { r: 1, g: 0, b: 0 }, dimmer: 1 }); rgbE.tick(0, {}); rgbE.goTo({ r: { color: { r: 0, g: 0, b: 1 } } }, 1, 0);
+  const rc = rgbE.tick(500, {});
+  check('RGB-Farben blenden stufenlos (halb Rot, halb Blau)', near(rc.live.r.color.r, 0.5, 1e-9) && near(rc.live.r.color.b, 0.5, 1e-9));
+}
+// ---- Lauflicht ----
+{
+  const e = mk(); e.addEffect({ type: 'chase', fixtures: 'group:Köpfe', step: 1, pattern: 'forward', fade: 0 });
+  const at = (b) => { const r = e.tick(b * 500, { beat: b }); return ['h1', 'h2', 'h3', 'h4'].map((id) => dim(r, id)).join(''); };
+  check('Lauflicht vorwärts: bei Schlag 0,5 leuchtet Kopf 1, dann 2, 3, 4, dann wieder 1', at(0.5) === '1000' && at(1.5) === '0100' && at(2.5) === '0010' && at(3.5) === '0001' && at(4.5) === '1000');
+  e.clearEffects(); e.addEffect({ type: 'chase', fixtures: 'group:Köpfe', step: 1, pattern: 'backward' });
+  check('Lauflicht rückwärts', at(0.5) === '0001' && at(1.5) === '0010' && at(3.5) === '1000');
+  e.clearEffects(); e.addEffect({ type: 'chase', fixtures: 'group:Köpfe', step: 1, pattern: 'pingpong' });
+  check('Lauflicht hin und her (1 2 3 4 3 2 | 1 ...)', ['0.5', '1.5', '2.5', '3.5', '4.5', '5.5', '6.5'].map((b) => at(+b).indexOf('1') + 1).join('') === '1234321', ['0.5', '1.5', '2.5', '3.5', '4.5', '5.5', '6.5'].map((b) => at(+b).indexOf('1') + 1).join(''));
+  e.clearEffects(); e.addEffect({ type: 'chase', fixtures: 'group:Köpfe', step: 1, width: 2 });
+  check('Lauflicht mit Breite 2: zwei nebeneinander', at(0.5) === '1100' && at(1.5) === '0110' && at(3.5) === '1001');
+  e.clearEffects(); e.addEffect({ type: 'chase', fixtures: 'group:Köpfe', step: 2, fade: 0.5 });
+  const soft = e.tick(0.5 * 500, { beat: 0.5 }), soft2 = e.tick(2 * 500 + 500 * 0.25 * 2, { beat: 2.5 });
+  check('Lauflicht mit weichem Übergang und Schrittlänge 2 Schläge', near(dim(soft, 'h1'), 0.5, 1e-9) || dim(soft, 'h1') >= 0.5, dim(soft, 'h1') + ' / ' + dim(soft2, 'h2') + ' ' + dim(soft2, 'h1'));
+  e.clearEffects(); e.addEffect({ type: 'chase', fixtures: 'group:Köpfe', step: 1, attr: 'dimmer', color: 7 });
+  const rc = e.tick(500, { beat: 1.5 });
+  check('Lauflicht kann dem leuchtenden Gerät eine Farbe geben', rc.live.h2.color === 7 && rc.live.h1.color === 0);
+  const rs = e.tick(1000, { beat: 1 });
+  check('Effekt greift nicht in nicht gewählte Geräte ein (Schalter und Strobo bleiben aus)', dim(rs, 's1') === 0 && dim(rs, 'x1') === 0);
+}
+// ---- Pulsieren, Farbwechsel, Gobo ----
+{
+  const e = mk(); e.setMany('group:Köpfe', { dimmer: 1 });
+  e.addEffect({ type: 'pulse', fixtures: 'group:Köpfe', rate: 1, shape: 'saw-down', min: 0, max: 1 });
+  check('Pulsieren (Sägezahn abwärts, 1 Schlag): bei 0 hell, bei 0,5 halb, bei 0,99 fast dunkel', near(dim(e.tick(0, { beat: 0 }), 'h1'), 1, 1e-9) && near(dim(e.tick(1, { beat: 0.5 }), 'h1'), 0.5, 1e-9) && dim(e.tick(2, { beat: 0.99 }), 'h1') < 0.02);
+  e.clearEffects(); e.addEffect({ type: 'pulse', fixtures: 'group:Köpfe', rate: 4, shape: 'sine', min: 0, max: 1, mode: 'mul' });
+  check('Pulsieren im Multiplikationsmodus: Grundhelligkeit 1 x Sinus (0 bei Beginn, 1 bei halber Periode)', near(dim(e.tick(3, { beat: 0 }), 'h1'), 0, 1e-9) && near(dim(e.tick(4, { beat: 2 }), 'h1'), 1, 1e-9));
+  e.clearEffects(); e.addEffect({ type: 'pulse', fixtures: 'group:Köpfe', rate: 1, shape: 'saw-up', phaseSpread: 1 });
+  const ps = e.tick(5, { beat: 0 });
+  check('Phasenversatz: die vier Köpfe pulsieren zeitversetzt (0, 0,25, 0,5, 0,75)', ['h1', 'h2', 'h3', 'h4'].every((id, i) => near(dim(ps, id), i * 0.25, 1e-9)));
+  e.clearEffects(); e.addEffect({ type: 'colorCycle', fixtures: 'group:Köpfe', colors: [7, 8, 5], step: 4, spread: 1 });
+  const cc = (b) => { const r = e.tick(100 + b, { beat: b }); return ['h1', 'h2', 'h3'].map((id) => r.live[id].color).join(''); };
+  check('Farbwechsel alle 4 Schläge, jedes Gerät eine Farbe weiter (Spread 1)', cc(0) === '785' && cc(4) === '857' && cc(8) === '578');
+  e.clearEffects(); e.addEffect({ type: 'gobo', fixtures: ['h1'], gobos: [0, 3, 5], step: 2 });
+  check('Gobo-Wechsel alle 2 Schläge', e.tick(200, { beat: 0 }).live.h1.gobo === 0 && e.tick(201, { beat: 2 }).live.h1.gobo === 3 && e.tick(202, { beat: 4 }).live.h1.gobo === 5 && e.tick(203, { beat: 6 }).live.h1.gobo === 0);
+}
+// ---- Bewegung ----
+{
+  const e = mk();
+  e.addEffect({ type: 'move', fixtures: ['h1'], shape: 'circle', rate: 4, size: { pan: 0.2, tilt: 0.1 }, center: { pan: 0.5, tilt: 0.5 } });
+  const p0 = e.tick(0, { beat: 0 }).live.h1, p1 = e.tick(1, { beat: 1 }).live.h1, p2 = e.tick(2, { beat: 2 }).live.h1;
+  check('Kreis: Start rechts (0,7 | 0,5), nach ¼ oben (0,5 | 0,6), nach ½ links (0,3 | 0,5)', near(p0.pan, 0.7, 1e-9) && near(p0.tilt, 0.5, 1e-9) && near(p1.pan, 0.5, 1e-9) && near(p1.tilt, 0.6, 1e-9) && near(p2.pan, 0.3, 1e-9));
+  e.clearEffects(); e.addEffect({ type: 'move', fixtures: 'group:Köpfe', shape: 'sweep-pan', rate: 4, size: { pan: 0.2, tilt: 0 }, spread: 0.5, center: { pan: 0.5, tilt: 0.5 } });
+  const mv = e.tick(10, { beat: 1 }).live;
+  check('Pendeln mit Versatz: Köpfe stehen an verschiedenen Punkten', mv.h1.pan > 0.6 && near(mv.h2.pan, 0.5 + 0.2 * Math.sin(2 * Math.PI * 0.375), 1e-9) && mv.h1.pan !== mv.h3.pan);
+  e.clearEffects(); e.addEffect({ type: 'move', fixtures: ['h2'], shape: 'sweep-pan', rate: 4, size: { pan: 0, tilt: 0 }, center: { target: { x: -1, y: 3, z: 0 } } });
+  const aimed = e.tick(20, { beat: 0 }).live.h2;
+  const g = e.geometry(e.fixture('h2')), hit = Stage.floorHit(g, Stage.beamDirection(g, aimed.pan, aimed.tilt));
+  check('Bewegung um einen Zielpunkt auf der Bühne: Kopf 2 zielt auf (-1 | 3)', hit && near(hit.x, -1, 0.01) && near(hit.y, 3, 0.01), JSON.stringify(hit));
+  e.clearEffects(); e.addEffect({ type: 'strobeHit', fixtures: ['x1'], every: 4, duration: 0.5, strobe: 0.6, forceOn: true });
+  const s0 = e.tick(30, { beat: 0.2 }), s1 = e.tick(31, { beat: 1 });
+  check('Blitz-Schläge: Strobo blitzt in den ersten 0,5 Schlägen jedes Takts (Kanal 70 = Blitzrate, Kanal 71 = Helligkeit)', s0.universe[69] === 153 && s0.universe[70] === 255 && s1.universe[69] === 0);
+  e.clearEffects(); e.addEffect({ type: 'set', fixtures: ['h4'], values: { color: 5, gobo: 4 } });
+  const st = e.tick(40, { beat: 0 }).live.h4;
+  check('feste Werte als Effekt (Farbe 5, Gobo 4)', st.color === 5 && st.gobo === 4);
+  const id = e.addEffect({ type: 'chase', fixtures: 'all' }); e.removeEffect(id);
+  check('Effekt entfernen', !e.effects.some((x) => x.id === id));
+}
+// ---- Effekte und Master ----
+{
+  const e = mk(); e.master = 0.5; e.addEffect({ type: 'chase', fixtures: 'group:Köpfe', step: 1 });
+  check('Master wirkt auch auf Effekte (Lauflicht 1 -> 0,5)', near(dim(e.tick(250, { beat: 0.5 }), 'h1'), 0.5, 1e-9));
+}
+// ---- realistische Bewegung ----
+{
+  const e = mk(); e.set('h1', 'pan', 0); e.tick(0, { beat: 0 });
+  let now = 0; const run = (ms) => { let r; for (let i = 0; i < ms / 25; i++) { now += 25; r = e.tick(now, { beat: 0 }); } return r; };
+  run(500);
+  e.set('h1', 'pan', 1);
+  let r = run(500);
+  check('Kopf fährt nicht sofort: nach 0,5 s ist er bei 180°/s erst 90° von 540° gefahren (0,167)', near(r.actual.h1.pan, 90 / 540, 0.01) && r.live.h1.pan === 1, String(r.actual.h1.pan));
+  r = run(4000);
+  check('nach ein paar Sekunden ist er am Ziel', near(r.actual.h1.pan, 1, 1e-9));
+  e.realisticMotion = false; e.set('h2', 'pan', 1);
+  check('ohne "realistische Bewegung" springt die Anzeige sofort', run(25).actual.h2.pan === 1);
+  e.realisticMotion = true; e.set('h3', 'pan', 0); run(100); e.set('h3', 'pan', 1);
+  check('lange Pause zwischen zwei Bildern (Fenster war im Hintergrund) lässt den Kopf nicht springen', (e.tick(now + 60000, { beat: 0 }), e.actual.h3.pan < 0.7));
+}
+out.push(fails ? '==> ' + fails + ' FEHLER' : '==> alle Tests bestanden');
+document.getElementById('out').textContent = out.join('\n');
+</script></body></html>

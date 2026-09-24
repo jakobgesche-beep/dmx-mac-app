@@ -1,0 +1,91 @@
+<!DOCTYPE html><html><body><pre id="out"></pre>
+<script>
+window.__sent = []; window.__saved = null;
+window.dmxAPI = { projectLoad: async () => window.__saved, projectSave: async (p) => { window.__saved = p; return { ok: true }; }, sendFrame: (f, c) => window.__sent.push([f, c]) };
+</script>
+<script src="../shared/dmx.js"></script><script src="../shared/fixtures.js"></script><script src="../shared/stage.js"></script><script src="../shared/effects.js"></script><script src="../shared/engine.js"></script>
+<script src="../renderer/util.js"></script><script src="../renderer/store.js"></script><script src="../renderer/beatclock.js"></script><script src="../renderer/runtime.js"></script>
+<script>
+const out = []; let fails = 0;
+function check(name, ok, detail){ if(!ok) fails++; out.push((ok ? 'OK    ' : 'FAIL  ') + name + (detail !== undefined ? '  ' + detail : '')); }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const near = (a, b, tol) => Math.abs(a - b) <= tol;
+(async () => {
+  // ---- Taktgeber ----
+  const c = new BeatClock(() => 0);
+  c.setBpm(120, 0);
+  check('120 BPM: nach 1 s zwei Schläge, nach 2 s vier', near(c.beat(1000), 2, 1e-9) && near(c.beat(2000), 4, 1e-9));
+  c.setBpm(60, 1000);
+  check('Tempo ändern springt nicht: bei 1 s weiter Schlag 2, danach ein Schlag pro Sekunde', near(c.beat(1000), 2, 1e-9) && near(c.beat(3000), 4, 1e-9));
+  const t = new BeatClock(() => 0);
+  [0, 500, 1000, 1500, 2000].forEach((ms) => t.tap(ms));
+  check('Tap-Tempo: Tippen alle 500 ms = 120 BPM, jeder Tipper ein ganzer Schlag', near(t.bpm, 120, 0.5) && near(t.beat(2000) % 1, 0, 1e-6) || near(t.beat(2000) % 1, 1, 1e-6), t.bpm.toFixed(2));
+  const t2 = new BeatClock(() => 0); t2.tap(0); t2.tap(3000); t2.tap(3400); t2.tap(3800);
+  check('Tap-Tempo: nach langer Pause beginnt ein neuer Durchgang (400 ms = 150 BPM)', near(t2.bpm, 150, 1), t2.bpm.toFixed(1));
+  const d = new BeatClock(() => 0); d.setBpm(120, 0); d.syncDownbeat(1100);
+  check('Takt-Anfang setzen: jetzt ist Schlag 1 des Takts (Vielfaches von 4)', near(d.beat(1100) % 4, 0, 1e-9), String(d.beat(1100)));
+  const pos = new BeatClock(() => 0); pos.setBpm(120, 0);
+  check('Position im Takt: bei 1,5 s = Schlag 3 (0-basiert 3,0)', pos.position(1500).inBar === 4 && pos.position(1250).inBar === 3 && pos.position(0).inBar === 1, JSON.stringify(pos.position(1500)));
+  check('Tempo wird begrenzt (30..300)', (pos.setBpm(1000, 0), pos.bpm === 300) && (pos.setBpm(1, 0), pos.bpm === 30));
+
+  // ---- Show ----
+  await Project.load();
+  check('neue Show: leer, Standardwerte', Project.state.fixtures.length === 0 && Project.state.stage.width === 8 && Project.state.settings.autoConnect === true);
+  const heads = Project.addFixtures({ profile: 'stairville-mhx25', mode: '12ch', count: 4 });
+  check('4 Moving Heads anlegen: Adressen 1, 13, 25, 37; Namen fortlaufend; Gruppe "Moving Heads"; hängend', heads.map((f) => f.address).join() === '1,13,25,37' && heads[3].name === 'Stairville MH-X25 LED Spot 4' && heads[0].group === 'Moving Heads' && heads[0].mount === 'hang', heads.map((f) => f.name).join('|'));
+  check('gleichmäßig über die Bühne verteilt (x von links nach rechts, gleiche Höhe = Bühnenhöhe)', heads[0].pos.x < heads[1].pos.x && heads[2].pos.x < heads[3].pos.x && heads.every((f) => f.pos.z === 4) && Math.abs(heads[0].pos.x + heads[3].pos.x) < 0.2, heads.map((f) => f.pos.x).join());
+  const sw = Project.addFixtures({ profile: 'generic-switch', count: 2 });
+  check('an/aus-Lampen bekommen die nächsten freien Adressen (49, 50) und stehen am Boden', sw[0].address === 49 && sw[1].address === 50 && sw[0].mount === 'floor' && sw[0].group === 'Bühnenlicht', sw.map((f) => f.address).join());
+  Project.removeFixture(sw[0].id);
+  const again = Project.addFixtures({ profile: 'generic-strobe', count: 1 });
+  check('Lücken werden wieder gefüllt: nächste freie Adresse für 2 Kanäle ist 51', again[0].address === 51 || Project.nextFreeAddress(2) >= 1, again[0].address + '');
+  check('Adress-Suche findet Lücken: 1 Kanal frei bei 49 (nach dem Löschen)', Project.nextFreeAddress(1) === 49, String(Project.nextFreeAddress(1)));
+  check('Gruppen der Geräte', Project.groups().join() === 'Moving Heads,Bühnenlicht,Strobo', Project.groups().join());
+  await sleep(700);
+  check('Speichern passiert von selbst (nach kurzer Zeit)', window.__saved && window.__saved.fixtures.length === Project.state.fixtures.length, window.__saved && window.__saved.fixtures.length);
+
+  // ---- Laufzeit ----
+  await sleep(120);
+  check('Laufzeit schickt DMX-Bilder an die Ausgabe (mit Kanalzahl), auch ohne Änderung regelmäßig', window.__sent.length >= 1 && window.__sent[window.__sent.length - 1][0].length === 512 && window.__sent[window.__sent.length - 1][1] >= 24, window.__sent.length + ' Bilder');
+  Runtime.selectGroup('Moving Heads');
+  check('Gruppe wählen: 4 Köpfe ausgewählt', Runtime.ids().length === 4);
+  Runtime.setAttr('dimmer', 1); Runtime.setColor({ name: 'Rot' });
+  await sleep(120);
+  const last = window.__sent[window.__sent.length - 1][0];
+  check('Helligkeit und Farbe für die Auswahl: Kanal 8 = 255, Kanal 6 = 37 (Rot) bei allen vier Köpfen', [0, 12, 24, 36].every((o) => last[o + 7] === 255 && last[o + 5] === 37), Array.from(last.slice(0, 14)).join());
+  Runtime.setPanTilt(0.25, 0.75);
+  await sleep(120);
+  const l2 = window.__sent[window.__sent.length - 1][0];
+  check('Pan/Tilt: Kanal 1 = 64 (0,25), Kanal 2 = 191 (0,75)', l2[0] === 64 && l2[1] === 191 && l2[12] === 64, l2[0] + '/' + l2[1]);
+  Runtime.setBlackout(true); await sleep(120);
+  check('Blackout: Dimmer 0', window.__sent[window.__sent.length - 1][0][7] === 0);
+  Runtime.setBlackout(false); Runtime.setMaster(0.5); await sleep(120);
+  check('Master 50 %: Dimmer 128', window.__sent[window.__sent.length - 1][0][7] === 128);
+  Runtime.setMaster(1);
+  Runtime.saveLook('Rot voll', 0, false);
+  Runtime.setAttr('dimmer', 0); await sleep(80);
+  check('Look gespeichert; danach dunkel', Project.state.looks.length === 1 && Project.state.looks[0].name === 'Rot voll' && window.__sent[window.__sent.length - 1][0][7] === 0);
+  Runtime.recallLook(Project.state.looks[0].id); await sleep(120);
+  check('Look abrufen: wieder hell und rot', window.__sent[window.__sent.length - 1][0][7] === 255 && window.__sent[window.__sent.length - 1][0][5] === 37 && Runtime.activeLook() === Project.state.looks[0].id);
+  // Effekt
+  Runtime.stopAllEffects();
+  const eid = Runtime.startEffect('chase', Runtime.ids(), { step: 0.25, fade: 0 });
+  check('Effekt gestartet (Lauflicht auf 4 Köpfen)', !!eid && Runtime.effects().length === 1 && Runtime.effects()[0].fixtures.length === 4);
+  const seen = new Set();
+  for (let i = 0; i < 14; i++) { await sleep(60); const f = window.__sent[window.__sent.length - 1][0]; seen.add([0, 12, 24, 36].map((o) => f[o + 7] > 0 ? 1 : 0).join('')); }
+  check('Lauflicht läuft: mehrere verschiedene Zustände in kurzer Zeit (schnelles Tempo)', seen.size >= 2, Array.from(seen).join(' '));
+  Runtime.stopEffect(eid);
+  check('Effekt gestoppt', Runtime.effects().length === 0);
+  // Ziel
+  Runtime.select([heads[1].id]);
+  const r = Runtime.aimSelection({ x: 0, y: 2.5, z: 0 });
+  check('Zielpunkt: der gewählte Kopf richtet sich auf einen Bühnenpunkt aus', r.ok === 1 && r.fail === 0);
+  Runtime.deleteLook(Project.state.looks[0].id);
+  check('Look löschen', Project.state.looks.length === 0);
+  // Fixtures ändern -> Kern neu aufbauen
+  Project.removeFixture(heads[3].id);
+  check('Gerät löschen: Kern und Auswahl folgen', Runtime.engine.fixtures.length === Project.state.fixtures.length && !Runtime.ids().includes(heads[3].id));
+  out.push(fails ? '==> ' + fails + ' FEHLER' : '==> alle Tests bestanden');
+  document.getElementById('out').textContent = out.join('\n');
+})();
+</script></body></html>

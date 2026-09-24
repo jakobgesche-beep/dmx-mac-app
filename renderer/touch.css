@@ -1,0 +1,22 @@
+/* Touch-Modus (<body class="touch">): große Ziele (mind. 44 px), breitere Regler, größere Schrift. */
+body.touch{touch-action:manipulation;-webkit-tap-highlight-color:transparent;font-size:15px;}
+body.touch *{-webkit-touch-callout:none;}
+body.touch .btn{min-height:46px;padding:10px 18px;font-size:15px;} body.touch .btn.small{min-height:44px;padding:8px 14px;font-size:14px;}
+body.touch .layer-tab{min-height:46px;padding:10px 16px;font-size:15px;}
+body.touch select,body.touch input[type=number],body.touch input[type=text]{min-height:44px;font-size:15px;}
+body.touch .chip{min-height:42px;padding:8px 16px;font-size:14px;}
+body.touch .swatch{width:46px;height:46px;} body.touch .tile{min-height:44px;font-size:14px;}
+body.touch .look-btn{min-height:70px;font-size:15px;}
+body.touch .badge{font-size:13px;padding:8px 12px;} body.touch .design-toggle{min-height:36px;padding:6px 12px;font-size:12.5px;}
+body.touch .blackout-btn{min-height:56px;font-size:15px;min-width:150px;} body.touch .master-range{width:260px;height:32px;}
+body.touch input[type=range]{height:36px;}
+body.touch .beat-lamp{width:22px;height:22px;} body.touch .bpm-input{width:96px;font-size:18px;}
+body.touch .table td{padding:12px 8px;}
+body.touch{padding-bottom:96px;}
+.full-btn{display:none;} body.touch .full-btn{display:inline-flex;}
+
+/* Bühnenseite: größere Position-Fläche, breitere Steuerspalte */
+body.touch .xy-pad{max-width:320px;}
+body.touch .live{grid-template-columns:minmax(0,1fr) 440px;}
+@media (min-width:1800px){body.touch .live{grid-template-columns:minmax(0,1fr) 520px;}}
+@media (max-width:1100px){body.touch .live{grid-template-columns:1fr;}}

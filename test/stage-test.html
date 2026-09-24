@@ -1,0 +1,79 @@
+<!DOCTYPE html><html><body><pre id="out"></pre>
+<script src="../shared/stage.js"></script>
+<script>
+const out = []; let fails = 0;
+function check(name, ok, detail){ if(!ok) fails++; out.push((ok ? 'OK    ' : 'FAIL  ') + name + (detail !== undefined ? '  ' + detail : '')); }
+const near = (a, b, tol) => Math.abs(a - b) <= tol;
+const S = Stage;
+let seed = 12345; const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+const geo = (o) => Object.assign({ x: 0, y: 2, z: 4, mount: 'hang', yaw: 0, invertPan: false, invertTilt: false, panRange: 540, tiltRange: 270 }, o || {});
+
+// ---- Grundfälle ----
+{
+  const g = geo();
+  const d = S.beamDirection(g, 0.5, 0.5);
+  check('hängend, Tilt Mitte: Strahl zeigt senkrecht nach unten', near(d[0], 0, 1e-9) && near(d[1], 0, 1e-9) && near(d[2], -1, 1e-9), d.join(','));
+  const h = S.floorHit(g, d);
+  check('trifft den Boden direkt unter der Lampe (0 | 2), Abstand 4 m', h && near(h.x, 0, 1e-9) && near(h.y, 2, 1e-9) && near(h.dist, 4, 1e-9), JSON.stringify(h));
+  const f = geo({ mount: 'floor', z: 0 });
+  const df = S.beamDirection(f, 0.5, 0.5);
+  check('stehend, Tilt Mitte: Strahl zeigt senkrecht nach oben, trifft den Boden nicht', near(df[2], 1, 1e-9) && S.floorHit(f, df) === null);
+  const t = S.beamDirection(g, 0.5, 0.5 + 45 / 270);
+  check('hängend, Tilt +45°: Strahl neigt sich 45° zur Vorwärtsrichtung (+y, nach hinten)', near(t[1], Math.sin(Math.PI / 4), 1e-9) && near(t[2], -Math.cos(Math.PI / 4), 1e-9), t.join(','));
+  const yaw = S.beamDirection(geo({ yaw: 90 }), 0.5, 0.5 + 45 / 270);
+  check('Drehung des Geräts (yaw 90°): Vorwärtsrichtung zeigt nach rechts (+x)', near(yaw[0], Math.sin(Math.PI / 4), 1e-9) && near(yaw[1], 0, 1e-9));
+  const inv = S.beamDirection(geo({ invertTilt: true }), 0.5, 0.5 + 45 / 270);
+  check('Tilt umkehren: Strahl neigt sich in die Gegenrichtung', near(inv[1], -Math.sin(Math.PI / 4), 1e-9));
+  const pan = S.beamDirection(geo(), 0.5 + 90 / 540, 0.5 + 45 / 270), panInv = S.beamDirection(geo({ invertPan: true }), 0.5 + 90 / 540, 0.5 + 45 / 270);
+  check('Pan umkehren spiegelt die Seite (x wechselt das Vorzeichen)', near(pan[0], -panInv[0], 1e-9) && Math.abs(pan[0]) > 0.5);
+  check('Öffnungswinkel 14° in 4 m Entfernung: Fleck-Radius 0,49 m', near(S.spotRadius(4, 14), 0.4912, 0.001), String(S.spotRadius(4, 14)));
+  const flat = S.beamEnd(g, S.beamDirection(g, 0.5, 0.5 + 135 / 270), 10);
+  check('waagrechter Strahl trifft den Boden nicht: Endpunkt nach 10 m', !flat.hit && near(flat.dist, 10, 1e-9));
+}
+// ---- Zielen: Ziel -> pan/tilt -> Strahl trifft das Ziel ----
+{
+  let worst = 0, n = 0, unreachable = 0;
+  for (let i = 0; i < 400; i++) {
+    const g = geo({ x: rnd() * 8 - 4, y: rnd() * 5, z: 2 + rnd() * 3, mount: rnd() < 0.7 ? 'hang' : 'floor', yaw: Math.round(rnd() * 360) - 180, invertPan: rnd() < 0.3, invertTilt: rnd() < 0.3, panRange: [540, 360, 180][Math.floor(rnd() * 3)], tiltRange: [270, 180][Math.floor(rnd() * 2)] });
+    if (g.mount === 'floor') g.z = rnd() * 0.5;
+    const T = { x: rnd() * 8 - 4, y: rnd() * 5, z: 0 };
+    const r = S.solveAim(g, T);
+    if (!r.ok) { unreachable++; continue; }
+    const hit = S.floorHit(g, S.beamDirection(g, r.pan, r.tilt));
+    if (!hit) { worst = 99; continue; }
+    worst = Math.max(worst, Math.hypot(hit.x - T.x, hit.y - T.y)); n++;
+  }
+  check('400 zufällige Aufbauten (stehend/hängend, gedreht, umgekehrt, alle Bereiche): jedes erreichbare Ziel wird auf < 1 cm getroffen', worst < 0.01 && n > 150, n + ' getroffen, ' + unreachable + ' nicht erreichbar, schlimmster Fehler ' + worst.toFixed(6) + ' m');
+  const g = geo(), r = S.solveAim(g, { x: 3, y: 2, z: 0 });
+  check('hängend bei (0|2|4), Ziel (3|2): Kopf dreht auf die Seite und neigt sich um 36,87°', r.ok && near(Math.abs(r.tiltDeg), 36.87, 0.01) && near(S.beamDirection(g, r.pan, r.tilt)[0], 0.6, 1e-9), JSON.stringify(r));
+  const under = S.solveAim(g, { x: 0, y: 2, z: 0 });
+  check('Ziel direkt darunter: Tilt Mitte', under.ok && near(under.tilt, 0.5, 1e-9));
+  const fl = geo({ mount: 'floor', z: 0, y: 0 });
+  check('stehende Lampe auf Bodenhöhe kann waagrecht auf einen Boden-Punkt zielen (Tilt 90°)', S.solveAim(fl, { x: 0, y: 3, z: 0 }).ok && near(S.solveAim(fl, { x: 0, y: 3, z: 0 }).tiltDeg, 90, 1e-6));
+  const bad = S.solveAim(geo({ mount: 'floor', z: 2, y: 0 }), { x: 0, y: 0.5, z: 0 });
+  check('Lampe auf einem 2-m-Podest kann nicht fast senkrecht nach unten zielen (außerhalb des Neigungsbereichs)', !bad.ok && /Neigungsbereich/.test(bad.reason), JSON.stringify(bad));
+  const up = S.solveAim(fl, { x: 1, y: 3, z: 3 });
+  check('stehende Lampe auf einen Punkt in der Luft (z=3): erreichbar', up.ok);
+  // nächstgelegene Lösung
+  const g540 = geo({ panRange: 540, x: 0, y: 0, z: 4 });
+  const T = { x: -3, y: -1, z: 0 };
+  const a = S.solveAim(g540, T, { pan: 0.5 + 200 / 540, tilt: 0.5 }), b = S.solveAim(g540, T, { pan: 0.5 - 200 / 540, tilt: 0.5 });
+  check('bei 540° Pan gibt es zwei Wege: es wird der kürzere von der aktuellen Stellung aus gewählt', a.ok && b.ok && Math.abs(a.panDeg - 200) < Math.abs(b.panDeg - 200) + 1e-9 && Math.abs(b.panDeg + 200) <= Math.abs(a.panDeg + 200) + 1e-9, a.panDeg.toFixed(1) + ' / ' + b.panDeg.toFixed(1));
+}
+// ---- Perspektive ----
+{
+  const src = [{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 8, y: 5 }, { x: 0, y: 5 }];       // Bühnenecken (m)
+  const dst = [{ x: 210, y: 620 }, { x: 1130, y: 640 }, { x: 900, y: 300 }, { x: 350, y: 290 }];   // Bildpunkte
+  const H = S.homography(src, dst);
+  check('Perspektive: die vier Ecken landen genau auf den Bildpunkten', src.every((p, i) => { const q = S.applyH(H, p.x, p.y); return near(q.x, dst[i].x, 1e-6) && near(q.y, dst[i].y, 1e-6); }));
+  const mid = S.applyH(H, 4, 2.5);
+  check('Bühnenmitte liegt im Bild zwischen den Ecken', mid.x > 400 && mid.x < 900 && mid.y > 350 && mid.y < 600, JSON.stringify(mid));
+  const Hi = S.invertH(H);
+  let worst = 0;
+  for (let i = 0; i < 100; i++) { const x = rnd() * 8, y = rnd() * 5, p = S.applyH(H, x, y), q = S.applyH(Hi, p.x, p.y); worst = Math.max(worst, Math.hypot(q.x - x, q.y - y)); }
+  check('Hin und zurück (Bühne -> Bild -> Bühne) auf < 1 mm genau', worst < 0.001, worst.toExponential(2));
+  check('vier Punkte auf einer Linie: keine Lösung statt Unsinn', S.homography([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }], dst) === null);
+}
+out.push(fails ? '==> ' + fails + ' FEHLER' : '==> alle Tests bestanden');
+document.getElementById('out').textContent = out.join('\n');
+</script></body></html>
